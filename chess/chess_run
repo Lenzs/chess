@@ -1,0 +1,485 @@
+#Bugs: undoing promotion
+
+import pygame as pg
+import keyboard as kb
+
+HEIGHT = WIDTH = 640
+IMAGES = {}
+SIZE_SQ = 60
+size = 8
+moveMade = False
+legalToMove = False
+whiteToMove = True
+selectIndex = 0
+firstClick = True
+castleLeft = False
+castleRight = False
+promoting = False
+inCheck = False
+beenInCheck = False
+outOfCheck = True
+matchedCheck = False
+blackInCheck = False
+whiteInCheck = False
+checkingPiece = ""
+
+class Square:
+    def __init__(self):
+        pass
+    def initiate(self, tempOccupied, tempType, tempColour, tempSelected, tempFirstMove):
+        self.occupied = tempOccupied
+        self.type = tempType
+        self.colour = tempColour
+        self.selected = tempSelected
+        self.firstMove = tempFirstMove
+    def display(self):
+        print(self.type) 
+
+def main():
+    global moveMade
+    global legalToMove
+    global whiteToMove
+    global selectIndex
+    global firstClick
+    global inCheck
+    global beenInCheck
+    global outOfCheck
+    global whiteInCheck
+    global blackInCheck
+    screen = pg.display.set_mode((480, 480))
+    addImages()
+    inGame = True
+    setArrays()
+    squareClicked = ()
+    squaresSelected = []
+
+    setGame(screen)
+    drawImages(screen, squares)
+    while inGame:
+        evg = pg.event.get()
+        for event in evg:
+            if event.type == pg.MOUSEBUTTONDOWN and promoting == False:
+                x, y = pg.mouse.get_pos()
+                if firstClick and (squares[getIndex(x, y)].occupied == False): 
+                    squareClicked = ()
+                    squaresSelected = []
+                elif squareClicked == (x , y):
+                    squareClicked = ()
+                    squaresSelected = []
+                    deselect(screen)
+                    firstClick = True
+                else:
+                    squareClicked = (x , y)
+                    squaresSelected.append(squareClicked)
+                    if firstClick and squares[getIndex(x, y)].colour == whiteToMove:
+                        select(squares[getIndex(x, y)], screen)
+                        selectIndex = getIndex(x, y)
+                        firstClick = False
+                if len(squaresSelected) == 2:
+                    print("check status " + str(inCheck))
+                    deselect(screen)
+                    move(squaresSelected[0], squaresSelected[1], screen)
+                    squaresSelected = []
+                    squareClicked = ()
+            if moveMade == True:
+                flipBoard(screen)
+                if outOfCheck:
+                    inCheck = outOfCheck = beenInCheck = blackInCheck = whiteInCheck = False
+                """if inCheck and beenInCheck and outOfCheck == False:
+                    print("calssic check")
+                    undo(screen)
+                    inCheck = True
+                    beenInCheck = False"""
+                if blackInCheck and whiteToMove == True and outOfCheck == False:
+                    print("illegal pos black")
+                    undo(screen)
+                    inCheck = True
+                    beenInCheck = False
+                elif whiteInCheck and whiteToMove and outOfCheck == False:
+                    print('illegal pos white')  
+                    undo(screen)
+                    inCheck = True
+                    beenInCheck = False
+                setGame(screen)
+                drawImages(screen, squares)
+                moveMade = False
+                firstClick = True
+            if kb.is_pressed('backspace') == True:
+                undo(screen)
+                checkForCheck()
+
+
+startingPosition = ["Rook", "Knight", "Bishop", "Queen", "King", "Bishop", "Knight", "Rook"]
+squares = [Square() for i in range(size*size)]
+moveList = [0]
+previousMoves = [0]
+possibleCheckingSquares = [None]
+
+
+def setArrays():
+    for i in range(len(squares)):
+        #for k in range(size):
+        if i < size:
+            squares[i].initiate(True, str("black" + startingPosition[i]), False, False, True)
+        elif i < size*2:
+            squares[i].initiate(True, "black" + "Pawn", False, False, True)
+        elif i < size*6:
+                squares[i].initiate(False, "none", None, False, None)
+        elif i < size*7:
+                squares[i].initiate(True, "white" + "Pawn", True, False, True)
+        else:
+            squares[i].initiate(True, str("white" + startingPosition[i - 7*size]), True, False, True)
+
+def addImages(): 
+    gamePieces = ["blackRook", "blackKnight", "blackBishop", "blackKing", "blackQueen", "blackPawn", "whiteRook", "whiteKnight", "whiteBishop", "whiteKing", "whiteQueen", "whitePawn"]
+    for piece in gamePieces:
+        IMAGES[piece] = pg.image.load("images/" + piece + ".png")
+
+def drawImages(screen, squares):
+    count = 0
+    for i in range(8):
+        for k in range(8):
+            if squares[count].occupied == True:
+                if squares[count].selected == True:
+                    screen.blit(pg.transform.smoothscale(IMAGES[squares[count].type], (75, 75)), [SIZE_SQ*k, SIZE_SQ*i, SIZE_SQ, SIZE_SQ])
+                else: 
+                    screen.blit(IMAGES[squares[count].type], [SIZE_SQ*k, SIZE_SQ*i, SIZE_SQ, SIZE_SQ])
+            count += 1
+    pg.display.update()
+
+def setGame(screen):
+    white = pg.Color(255, 255, 255)
+    gray = pg.Color(130, 130, 130)
+    screen.fill(white)
+
+    colours =[white, gray]
+    for i in range(8):
+        for k in range(8):
+            colour = colours[(i + k)%2]
+            pg.draw.rect(screen, colour, [SIZE_SQ*i, SIZE_SQ*k, SIZE_SQ, SIZE_SQ])
+    pg.display.update()
+
+def flipBoard(screen):
+    print("board flipped")
+    temp = [Square() for i in range(size*size)]
+    for i in range(len(temp)):
+        row = i//size
+        if row%8 == 0 and row != 0:
+            row -= 1
+        index = (i - size*row) + ((size*(size-1)) - size*row) 
+        temp[i] = squares[index]
+    for k in range(len(squares)):
+        squares[k] = temp[k]
+    pg.transform.flip(screen, False, True)
+
+def getIndex(x, y):
+    col = ((x - (x%60)) / 60) 
+    row = ((y - (y%60)) / 60) 
+    index = int(row*8 + col)
+    return index
+
+def select(Square, screen):
+    Square.selected = True
+    setGame(screen)
+    drawImages(screen, squares)
+
+def deselect(screen):
+    global firstClick
+    global selectIndex
+    squares[selectIndex].selected = False
+    setGame(screen)
+    drawImages(screen, squares)
+    firstClick = True
+
+def move(start_square, end_square, screen):
+    global moveMade
+    global whiteToMove
+    global promoting
+    global inCheck
+    global beenInCheck
+    index1 = getIndex(start_square[0], start_square[1])
+    index2 = getIndex(end_square[0], end_square[1])
+    getMoves(index1)
+    if inCheck:
+            beenInCheck = True
+    if squares[index1].occupied == True and checkLegal(index1, index2):
+        if squares[index1].type == "blackKing" or squares[index1].type == "whiteKing":
+            if castleLeft and index2 == (index1 - 2):
+                previousMoves.append((index1, index2, squares[index1], squares[index2]))
+                squares[index1 - 2].initiate(True, squares[index1].type, squares[index1].colour, False, False)
+                squares[index1].initiate(False, "none", None, False, None)
+                squares[index1 - 1].initiate(True, squares[index1 - 4].type, squares[index1 - 4].colour, False, False)
+                squares[index1 - 4].initiate(False, "none", None, False, None)
+            elif castleRight and index2 == (index1 + 2):
+                previousMoves.append((index1, index2, squares[index1], squares[index2]))
+                squares[index1 + 2].initiate(True, squares[index1].type, squares[index1].colour, False, False)
+                squares[index1].initiate(False, "none", None, False, None)
+                squares[index1 + 1].initiate(True, squares[index1 + 3].type, squares[index1 + 3].colour, False, False)
+                squares[index1 + 3].initiate(False, "none", None, False, None)
+            else:
+                previousMoves.append((index1, index2, squares[index1], squares[index2]))
+                squares[index2].initiate(True, squares[index1].type, squares[index1].colour, False, False)
+                squares[index1].initiate(False, "none", None, False, None)
+        elif (squares[index1].type == "blackPawn" or squares[index1].type == "whitePawn") and index2 <= 7:
+            previousMoves.append((index1, index2, squares[index1], squares[index2]))
+            print(str(squares[index1].type))
+            promoting = True
+            promote(index1, screen)
+            squares[index2].initiate(True, squares[index1].type, squares[index1].colour, False, False)
+            squares[index1].initiate(False, "none", None, False, None)
+        else:
+            previousMoves.append((index1, index2, squares[index1], squares[index2]))
+            squares[index2].initiate(True, squares[index1].type, squares[index1].colour, False, False)
+            squares[index1].initiate(False, "none", None, False, None)
+        checkForCheck()
+        print("moved, currently check is " + str(inCheck))
+        if whiteToMove:
+            whiteToMove = False
+        else:
+            whiteToMove = True
+        if promoting == False:
+             moveMade = True
+
+def checkLegal(start_square, end_square):
+    correctColour = correctSide = moveInBounds = False
+    if whiteToMove == squares[start_square].colour:
+        correctSide = True
+    if squares[start_square].colour != squares[end_square].colour:
+        correctColour = True
+    for index in range(len(moveList)):
+        print(str(moveList[index]) + ", " + str(end_square))
+        if end_square == moveList[index]:
+            moveInBounds = True
+            break
+        else:
+            moveInBounds = False
+            print("out of bounds")
+    if correctColour and correctSide and moveInBounds:
+        moveIsLegal = True
+    else:
+        moveIsLegal = False
+    return moveIsLegal
+
+def promote(index, screen):
+    global moveMade
+    global promoting
+    promoted = False
+    if squares[index].colour:
+        colour = "white"
+    else:
+        colour = "black"
+    locations = [None] * 4
+    promotionOptions = [colour + "Queen", colour + "Rook", colour + "Bishop", colour + "Knight"]
+    for i in range(len(promotionOptions)):
+        screen.blit(pg.transform.smoothscale(IMAGES[promotionOptions[i]], (120, 120)), [SIZE_SQ*(i*2), SIZE_SQ*3, SIZE_SQ*2, SIZE_SQ*2])
+        locations[i] = SIZE_SQ*(2*i)
+        pg.display.update()
+    while moveMade == False:
+        evg = pg.event.get()
+        for event in evg:
+            if event.type == pg.MOUSEBUTTONDOWN:
+                x, y = pg.mouse.get_pos()
+                newPieceIndex = (x//120) + 1 
+                if y in range(SIZE_SQ*3, SIZE_SQ*5 + 1):
+                    if newPieceIndex == 1:
+                        squares[index].type = str(colour + "Queen")
+                        promoted = moveMade = True
+                    elif newPieceIndex == 2:
+                        squares[index].type = str(colour + "Rook")
+                        promoted = moveMade = True
+                    elif newPieceIndex == 3:
+                        squares[index].type = str(colour + "Bishop")
+                        promoted = moveMade = True
+                    elif newPieceIndex == 4:
+                        squares[index].type = str(colour + "Knight")
+                        promoted = moveMade = True
+    if promoted == True:
+        promoting = False
+        setGame(screen)
+        drawImages(screen, squares)
+
+def undo(screen):
+    print("move undone")
+    global moveMade
+    global whiteToMove
+    global inCheck
+    if len(previousMoves) > 1:
+        flipBoard(screen)
+        squares[previousMoves[len(previousMoves) - 1][1]] = previousMoves[len(previousMoves) - 1][2]
+        squares[previousMoves[len(previousMoves) - 1][0]] = previousMoves[len(previousMoves) - 1][3]
+        previousMoves.pop(len(previousMoves) - 1)
+        if whiteToMove:
+            whiteToMove = False
+        else:
+            whiteToMove = True
+        moveMade = False
+        inCheck = False
+    setGame(screen)
+    drawImages(screen, squares)
+
+def getMoves(index):
+    global moveList
+    global castleLeft
+    global castleRight
+    global inCheck
+
+    moveList = []
+    piece = squares[index].type
+    #print(str(piece))
+
+    row = (index + 1)//8 
+    if row%8 == 0: 
+        row -= 1
+
+    if piece == "blackPawn" or piece == "whitePawn":
+        if squares[index].firstMove :
+            possibleDistances = [-8, -16]
+        else:
+            possibleDistances = [-8]
+        if row > 0:
+            if squares[index - 9].occupied and squares[index - 9].colour != squares[index].colour and (index + 1)%8 >= 0:
+                possibleDistances.append(-9)
+            if squares[index - 7].occupied and squares[index - 7].colour != squares[index].colour and (index + 1)%8 >= 1:
+                possibleDistances.append(-7)
+        for i in range(len(possibleDistances)):
+            reachedPiece = False
+            if (index + possibleDistances[i]) in range(64) and reachedPiece == False:
+                if squares[index + possibleDistances[i]].occupied == False:
+                    moveList.append(index + possibleDistances[i])
+                elif squares[index + possibleDistances[i]].occupied and squares[index + possibleDistances[i]].colour != squares[index].colour:
+                    moveList.append(index + possibleDistances[i])
+                    reachedPiece = True
+                else:
+                    reachedPiece = True
+
+    if piece == "blackKnight" or piece == "whiteKnight":
+        possibleDistances = [6, -6, 10, -10, 15, -15, 17, -17]
+        for i in range(len(possibleDistances)):
+            if index + possibleDistances[i] >= 0 and index + possibleDistances[i] <= 63:
+                if squares[index + possibleDistances[i]].occupied == False:
+                    moveList.append(index + possibleDistances[i])
+                elif squares[index + possibleDistances[i]].occupied and squares[index + possibleDistances[i]].colour != squares[index].colour:
+                    moveList.append(index + possibleDistances[i])
+
+    if piece == "blackBishop" or piece == "whiteBishop":
+        possibleDistances = [7, -7, 9, -9]
+        for i in range(len(possibleDistances)):
+            reachedPiece = False
+            for k in range(1, 9):
+                if (index + possibleDistances[i]*k) in range(64) and reachedPiece == False:
+                    if squares[index + possibleDistances[i]*k].occupied == False:
+                        moveList.append(index + possibleDistances[i]*k)
+                    elif squares[index + possibleDistances[i]*k].occupied and squares[index + possibleDistances[i]*k].colour != squares[index].colour:
+                        moveList.append(index + possibleDistances[i]*k)
+                        reachedPiece = True
+                    else:
+                        reachedPiece = True
+                   
+    if piece == "blackRook" or piece == "whiteRook":
+        possibleDistances = [1, -1, 8, -8]
+        for i in range(len(possibleDistances)):
+            reachedPiece = False
+            reachedEnd = False
+            for k in range(1, 9):
+                if (index + possibleDistances[i]*k) in range(64) and reachedPiece == False and reachedEnd == False:
+                    if squares[index + possibleDistances[i]*k].occupied == False:
+                        moveList.append(index + possibleDistances[i]*k)
+                    elif squares[index + possibleDistances[i]*k].occupied and squares[index + possibleDistances[i]*k].colour != squares[index].colour:
+                        moveList.append(index + possibleDistances[i]*k)
+                        reachedPiece = True
+                    else:
+                        reachedPiece = True
+                    if (index + possibleDistances[i]*k + 1)%8 == 0 or (index + possibleDistances[i]*k + 1)%8 == 1 and possibleDistances[i] in range(-1, 2):
+                        reachedEnd = True  
+                        
+    if piece == "blackQueen" or piece == "whiteQueen":
+        possibleDistances = [1, -1, 7, -7, 8, -8, 9, -9]
+        for i in range(len(possibleDistances)):
+            reachedPiece = False
+            reachedEnd = False
+            for k in range(1, 9):
+                if (index + possibleDistances[i]*k) in range(64) and reachedPiece == False and reachedEnd == False:
+                    if squares[index + possibleDistances[i]*k].occupied == False:
+                        moveList.append(index + possibleDistances[i]*k)
+                    elif squares[index + possibleDistances[i]*k].occupied and squares[index + possibleDistances[i]*k].colour != squares[index].colour:
+                        moveList.append(index + possibleDistances[i]*k)
+                        reachedPiece = True
+                    else:
+                        reachedPiece = True
+                    if (index + possibleDistances[i]*k + 1)%8 == 0 or (index + possibleDistances[i]*k + 1)%8 == 1 and possibleDistances[i] in range(-1, 2):
+                        reachedEnd = True 
+    
+    if piece == "blackKing" or piece == "whiteKing":
+        castleLeft = False
+        castleRight = False
+        possibleDistances = [1, -1, 7, -7, 8, -8, 9, -9]
+        for i in range(len(possibleDistances)):
+            reachedPiece = False
+            if (index + possibleDistances[i]) in range(64) and reachedPiece == False:
+                if squares[index + possibleDistances[i]].occupied == False:
+                    moveList.append(index + possibleDistances[i])
+                elif squares[index + possibleDistances[i]].occupied and squares[index + possibleDistances[i]].colour != squares[index].colour:
+                    moveList.append(index + possibleDistances[i])
+                    reachedPiece = True
+                else:
+                    reachedPiece = True
+        if squares[index].firstMove:
+            for i in range(2):
+                if squares[index + i + 1].occupied == False and squares[index + 3].firstMove:
+                    moveList.append(index + 2)
+                    castleRight = True
+                if squares[index - i - 1].occupied == False and squares[index - 4].firstMove:
+                    moveList.append(index - 2)
+                    castleLeft = True
+
+def flipValues(index):
+    row = index//size
+    if row%8 == 0 and row != 0:
+            row -= 1
+    newIndex = (index - size*row) + ((size*(size-1)) - size*row)
+    return newIndex
+
+def checkForCheck():
+    global checkResolved
+    global possibleCheckingSquares
+    global inCheck
+    global beenInCheck
+    global outOfCheck
+    global matchedCheck
+    global blackInCheck
+    global whiteInCheck
+    global checkingPiece
+    for i in range(len(squares)):
+        if squares[i].colour != None and inCheck == False:
+            getMoves(i)
+            for k in range(len(moveList)):
+                if inCheck == False:
+                    if squares[moveList[k]].type == "blackKing" or squares[moveList[k]].type == "whiteKing":
+                        if squares[moveList[k]].type == "blackKing":
+                            blackInCheck = True
+                            print('black is in  check')
+                        elif squares[moveList[k]].type == "whiteKing":
+                            whiteInCheck = True
+                            print('white is in check')
+                        checkingPiece = squares[moveList[k]].type 
+                        inCheck = True
+                        checkResolved = False
+                    else:
+                        inCheck = False
+                        beenInCheck = False
+        elif squares[i].colour != whiteToMove and squares[i].colour != None and inCheck and beenInCheck:
+            outOfCheck = True
+            print("elif working")
+            getMoves(i)
+            if squares[i].type == "blackPawn" or squares[i].type == "whitePawn":
+                print("pawn checking")
+                if (i + 7) in range(len(squares)) and squares[i + 7].occupied and squares[i + 7].colour == whiteToMove and (i + 1)%8 >= 1:
+                    moveList.append(i + 7)
+                if (i + 9) in range(len(squares)) and squares[i + 9].occupied and squares[i + 9].colour == whiteToMove and (i + 1)%8 >= 0:
+                    moveList.append(i + 9)
+            for k in range(len(moveList)):
+                if squares[moveList[k]].type == "blackKing" or squares[moveList[k]].type == "whiteKing":
+                    print("no out of check")
+                    outOfCheck = False
+
+main()
